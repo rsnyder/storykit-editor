@@ -1,0 +1,51 @@
+# Publishes the StoryKit editor from its source of truth
+# (rsnyder/storykit-starter) to this repo's GitHub Pages.
+# See storykit-starter/docs/editor-central.md.
+name: deploy
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 6 * * *"   # daily safety net; main trigger is manual/API
+  push:
+    branches: [main]
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Check out the editor source (canonical repo)
+        uses: actions/checkout@v4
+        with:
+          repository: rsnyder/storykit-starter
+          ref: main
+          path: src
+
+      - name: Assemble the artifact
+        run: |
+          mkdir -p site/assets/js
+          cp src/editor/* site/
+          cp src/assets/js/skrender.js site/assets/js/skrender.js
+          echo "editor source: rsnyder/storykit-starter@$(git -C src rev-parse HEAD)" > site/SOURCE.txt
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
