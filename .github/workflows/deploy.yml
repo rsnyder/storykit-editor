@@ -22,19 +22,26 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Check out the editor source (canonical repo)
+      - name: Check out the transition page
+        uses: actions/checkout@v4
+        with:
+          path: deploy
+
+      - name: Check out the previous editor for local draft recovery
         uses: actions/checkout@v4
         with:
           repository: rsnyder/storykit-starter
           ref: 1d9256c18a13abc7419a40669ba4d4286d389c7e
-          path: src
+          path: previous
 
-      - name: Assemble the artifact
+      - name: Assemble the transition and recovery artifact
         run: |
-          mkdir -p site/assets/js
-          cp src/editor/* site/
-          cp src/assets/js/skrender.js site/assets/js/skrender.js
-          echo "editor source: rsnyder/storykit-starter@$(git -C src rev-parse HEAD)" > site/SOURCE.txt
+          mkdir -p site/legacy/assets/js
+          cp deploy/transition/* site/
+          cp previous/editor/* site/legacy/
+          cp previous/assets/js/skrender.js site/legacy/assets/js/skrender.js
+          echo "Production: https://storykit-editor.ron-f9a.workers.dev/editor/" > site/SOURCE.txt
+          echo "Recovery editor: rsnyder/storykit-starter@1d9256c18a13abc7419a40669ba4d4286d389c7e" >> site/SOURCE.txt
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
