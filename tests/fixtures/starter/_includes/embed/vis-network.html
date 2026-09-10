@@ -1,0 +1,36 @@
+{%- comment -%}
+StoryKit network (vis-network) viewer embed. Builds the component query
+string (each value escaped with cgi_escape before appending) and delegates
+iframe emission to embed/_iframe.html. The component locates its CSV data
+block on the host page by the id convention "<id>-csv" unless dataid is
+given explicitly.
+{%- endcomment -%}
+
+{%- assign qs = "" -%}
+
+{%- if include.dataid -%}
+{%- assign v = include.dataid | cgi_escape -%}
+{%- assign qs = "dataid=" | append: v -%}
+{%- endif -%}
+
+{%- if include.caption -%}
+{%- assign v = include.caption | cgi_escape -%}
+{%- assign qs = qs | append: "&caption=" | append: v -%}
+{%- endif -%}
+
+{%- assign aspect = include.aspect | default: 1.0 -%}
+
+{%- comment -%} Strip a leading & left when the first parameter was absent {%- endcomment -%}
+{%- assign qs_first = qs | slice: 0, 1 -%}
+{%- if qs_first == "&" -%}{%- assign qs = qs | remove_first: "&" -%}{%- endif -%}
+
+{%- capture component_src -%}{{ '/assets/components/vis-network.html' | relative_url }}?{{ qs }}{%- endcapture -%}
+
+{%- include embed/_iframe.html
+      src=component_src
+      base_class="embed-vis-network"
+      title="StoryKit network viewer"
+      id=include.id
+      class=include.class
+      aspect=aspect
+-%}

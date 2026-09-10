@@ -1,0 +1,54 @@
+{%- comment -%}
+Flat / two-column display-mode toggle button.
+All mode logic (initial mode, class toggling, scrollytelling init/teardown,
+localStorage persistence) lives in setViewMode in assets/js/storykit.js —
+this include is only the button UI. It follows mode changes via the
+"storykit:modechange" event so it stays in sync no matter who switches modes.
+{%- endcomment -%}
+
+{%- if page.storykit.mode_toggle == nil -%}
+    {%- if site.storykit.mode_toggle == nil -%}
+        {%- assign toggle_enabled = true -%}
+    {% else %}
+        {%- assign toggle_enabled = site.storykit.mode_toggle -%}
+    {%- endif -%}
+{%- else -%}
+    {%- assign toggle_enabled = page.storykit.mode_toggle -%}
+{%- endif -%}
+
+{%- if toggle_enabled -%}
+
+<a href="#" role="button" class="js-col2-toggle" style="cursor:pointer;"
+   title="Toggle two-column view" aria-label="Toggle two-column view">
+    <i class="fa-solid fa-table-columns" aria-hidden="true"></i>
+</a>
+
+<script type="module">
+    import { isMobile, setViewMode, getViewMode } from '{{ "/assets/js/storykit.js" | relative_url }}';
+
+    const btn = document.querySelector('.js-col2-toggle');
+    if (btn) {
+        if (isMobile) {
+            /* Two-column mode is unavailable on small screens.
+               Block comment, not `//`: the production compress.html layout
+               strips newlines and a line comment would eat the rest of this
+               script (and unbalance the braces). */
+            btn.remove();
+        } else {
+            const icon = btn.querySelector('i');
+            const setIcon = (mode) => {
+                if (icon) icon.className = mode === 'col2' ? 'fa-regular fa-square' : 'fa-solid fa-table-columns';
+            };
+
+            window.addEventListener('storykit:modechange', (e) => setIcon(e.detail.mode));
+            if (getViewMode()) setIcon(getViewMode());
+
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                setViewMode(getViewMode() === 'col2' ? 'flat' : 'col2');
+            });
+        }
+    }
+</script>
+
+{%- endif -%}

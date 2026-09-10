@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>StoryKit · GitHub sign-in prototype</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <div id="demo-banner" class="demo-banner" hidden>LOCAL DEMO · GitHub accounts, repositories, and commits are simulated. No real GitHub requests are made.</div>
+  <header class="masthead"><a class="brand" href="/" aria-label="StoryKit home"><span class="brand-mark">S</span> StoryKit<span class="prototype">AUTH PROTOTYPE</span></a><span class="header-note">Your words, your workspace.</span></header>
+  <main>
+    <div class="intro"><p class="eyebrow">A SMALLER STEP FROM DRAFT TO PUBLISHED</p><h1>Start here. Save when you’re ready.</h1><p>Write in this browser, then choose a home for your story on GitHub.</p></div>
+    <div class="workspace">
+      <section class="draft card" aria-labelledby="draft-heading">
+        <div class="card-header"><div><p class="eyebrow">01 / WRITE</p><h2 id="draft-heading">Your local draft</h2></div><button id="download" class="quiet">Download .md</button></div>
+        <label for="title">Story title</label><input id="title" maxlength="200" placeholder="Give your story a title" autocomplete="off">
+        <div class="editor-label"><label for="content">Markdown</label><span id="word-count">0 words</span></div>
+        <textarea id="content" spellcheck="true" aria-describedby="local-status" placeholder="# A story worth telling…"></textarea>
+        <div class="draft-footer"><span id="local-status" role="status">Saved in this browser</span><span>GitHub sign-in is optional</span></div>
+        <details id="history"><summary>Local recovery copies</summary><p class="help">The last 10 copies taken before GitHub saves. Download any copy to recover it.</p><ul id="history-list"></ul></details>
+      </section>
+      <aside class="sync card" aria-labelledby="sync-heading">
+        <div class="card-header"><div><p class="eyebrow">02 / CONNECT</p><h2 id="sync-heading">Save to GitHub</h2></div><span class="github-icon" aria-hidden="true">↗</span></div>
+        <div id="signed-out">
+          <p class="explanation">Give your draft a home in a repository you can write to. Your local copy stays right here.</p>
+          <button id="sign-in" class="primary full">Sign in with GitHub <span aria-hidden="true">↗</span></button>
+          <p id="scope-note" class="help">GitHub will ask you to authorize access to public and private repositories.</p>
+          <p id="configuration-note" class="notice" hidden>Sign-in setup is not complete on this instance. Local writing and downloads are ready to use.</p>
+        </div>
+        <div id="signed-in" hidden>
+          <div class="account"><span class="account-dot" aria-hidden="true"></span><span id="identity"></span><button id="sign-out" class="text-button">Sign out</button></div>
+          <p class="help">Signing out keeps local drafts on this browser.</p>
+          <fieldset id="destination-fields">
+            <div class="label-row"><label for="repo-search">Repository</label><button id="refresh" class="text-button" type="button">Refresh</button></div>
+            <input id="repo-search" type="search" placeholder="Find owner / repository" autocomplete="off" aria-controls="repos">
+            <select id="repos" size="5" aria-label="Writable repositories"></select>
+            <p id="repo-status" class="help" role="status"></p>
+            <details class="missing"><summary>Missing a repository?</summary><p class="help">Check your GitHub account, collaborator invitation, and organization approval or SSO. Read-only and archived repositories are excluded. Refresh after changing access.</p></details>
+            <div id="branch-fields" hidden>
+              <label for="branch">Branch</label><select id="branch"></select>
+              <p id="branch-status" class="help" role="status"></p>
+              <label class="checkbox"><input type="checkbox" id="create-branch"> Save on a new branch</label>
+              <div id="new-branch-field" hidden><label for="new-branch">New branch name</label><input id="new-branch" placeholder="drafts/my-story" autocomplete="off"><p class="help">Created from the repository’s default branch when you save.</p></div>
+              <label for="path">File location</label><input id="path" placeholder="_posts/2026-09-06-my-story.md" autocomplete="off">
+              <p class="help">This prototype saves Markdown files up to 200 KB. Branch rules still apply.</p>
+            </div>
+          </fieldset>
+          <button id="review" class="primary full" disabled>Review destination <span aria-hidden="true">→</span></button>
+        </div>
+        <div id="feedback" class="feedback" role="status" aria-live="polite" hidden></div>
+        <a id="saved-link" class="saved-link" target="_blank" rel="noopener noreferrer" hidden>View file on GitHub ↗</a>
+        <div class="sync-footer"><span class="small-dot" aria-hidden="true"></span><p>Nothing is uploaded until you choose Save.</p></div>
+      </aside>
+    </div>
+    <footer class="page-footer"><span>STORYKIT / AUTHORING EXPERIMENTS</span><span>Local drafts · Familiar sign-in · Your repositories</span></footer>
+  </main>
+  <dialog id="confirm-dialog" aria-labelledby="confirm-heading">
+    <p class="eyebrow">REVIEW BEFORE SAVING</p><h2 id="confirm-heading">Save this draft?</h2>
+    <p id="destination-summary" class="destination-summary"></p><p id="file-note"></p>
+    <details id="remote-details" hidden><summary>Read the existing GitHub copy</summary><pre id="remote-content"></pre></details>
+    <p class="help">A local recovery copy is saved first. Writing can continue after you close this dialog.</p>
+    <div class="dialog-actions"><button id="cancel-save" class="quiet">Cancel</button><button id="confirm-save" class="primary">Save to GitHub</button></div>
+  </dialog>
+</body>
+</html>

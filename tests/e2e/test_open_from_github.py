@@ -1,0 +1,354 @@
+"""Open-from-GitHub feature (doclist "Open…", ?open= boot param, link drop).
+
+Drives editor/index.html against the stateful GitHubMock, hermetically:
+  a. booting with ?repo/&branch/&open= opens the remote file as a bound,
+     sha-anchored document and strips the params from the URL,
+  b. a second boot with the same params reuses the existing document
+     (dedupe — no duplicate list entries, local content preserved),
+  c. dropping a github.com blob URL onto the document list opens the file
+     (the bookmarklet emits exactly the URL form this exercises).
+"""
+
+import sys
+from pathlib import Path
+
+import pytest
+from playwright.sync_api import expect
+
+REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO / "tools"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import render_regression as rr  # noqa: E402
+from github_mock import GitHubMock  # noqa: E402
+
+from test_m5_sync import (  # noqa: E402  (shared fixtures/helpers)
+    browser, site_dir, _hermetic_page,
+)
+
+REMOTE = "---\ntitle: Already on GitHub\n---\n\nRemote body.\n"
+PATH = "_posts/2026-03-03-existing.md"
+OWNER, REPO_NAME = "acme-corp", "open-site"
+
+
+def _doc_summary(page):
+    # Only GitHub-bound documents: the first-run Welcome seed (path null,
+    # unbound) coexists in a fresh store and is not what these tests assert.
+    return page.evaluate(
+        """async () => {
+            const app = await import('/editor/app.js');
+            const docs = await app.modules.store.docs.list();
+            return docs.filter((d) => d.path).map((d) => ({
+                path: d.path, title: d.title, content: d.content,
+                bound: !!(d.github && d.github.owner),
+                sha: d.github && d.github.sha,
+            }));
+        }""")
+
+
+def test_open_param_boots_into_the_remote_file(browser, site_dir):
+    with rr.serve_site(site_dir) as base_url:
+        context, page, _ = _hermetic_page(browser)
+        try:
+            mock = GitHubMock(page, owner=OWNER, repo=REPO_NAME)
+            mock.set_remote("main", PATH, REMOTE)
+            page.goto(
+                f"{base_url}/editor/index.html?repo={OWNER}/{REPO_NAME}&branch=main&open={PATH}",
+                wait_until="load", timeout=rr.POLL_TIMEOUT_MS)
+            page.wait_for_selector(".cm-content", timeout=30_000)
+
+            docs = _doc_summary(page)
+            assert len(docs) == 1 and docs[0]["path"] == PATH
+            assert docs[0]["title"] == "Already on GitHub"
+            assert docs[0]["content"] == REMOTE
+            assert docs[0]["bound"] and docs[0]["sha"]
+
+            # params stripped so a later plain reload behaves normally
+            assert "open=" not in page.url and "repo=" not in page.url
+        finally:
+            context.close()
+
+
+def test_second_boot_with_same_params_dedupes(browser, site_dir):
+    with rr.serve_site(site_dir) as base_url:
+        context, page, _ = _hermetic_page(browser)
+        try:
+            mock = GitHubMock(page, owner=OWNER, repo=REPO_NAME)
+            mock.set_remote("main", PATH, REMOTE)
+            url = f"{base_url}/editor/index.html?repo={OWNER}/{REPO_NAME}&branch=main&open={PATH}"
+            page.goto(url, wait_until="load", timeout=rr.POLL_TIMEOUT_MS)
+            page.wait_for_selector(".cm-content", timeout=30_000)
+
+            expect(page.locator('.cm-content')).to_contain_text('Remote body.')
+
+            # Edit through the real buffer so autosave and page-exit flushing
+            # retain the same content (direct DB writes bypass the editor).
+            page.locator('.cm-content').focus()
+            page.keyboard.press('ControlOrMeta+End')
+            page.keyboard.type('LOCAL EDIT\n')
+            for _ in range(50):
+                if _doc_summary(page)[0]['content'].endswith('LOCAL EDIT\n'):
+                    break
+                page.wait_for_timeout(100)
+            assert _doc_summary(page)[0]['content'].endswith('LOCAL EDIT\n')
+
+            page.goto(url, wait_until="load", timeout=rr.POLL_TIMEOUT_MS)
+            page.wait_for_selector(".cm-content", timeout=30_000)
+            docs = _doc_summary(page)
+            assert len(docs) == 1, f"expected dedupe, got {len(docs)} docs"
+            assert docs[0]["content"].endswith("LOCAL EDIT\n"), "local content preserved"
+        finally:
+            context.close()
+
+
+def test_dropping_a_github_blob_url_on_the_doclist_opens_it(browser, site_dir):
+    with rr.serve_site(site_dir) as base_url:
+        context, page, _ = _hermetic_page(browser)
+        try:
+            mock = GitHubMock(page, owner=OWNER, repo=REPO_NAME)
+            mock.set_remote("main", PATH, REMOTE)
+            page.goto(f"{base_url}/editor/index.html", wait_until="load",
+                      timeout=rr.POLL_TIMEOUT_MS)
+            page.wait_for_selector("#new-doc:not([disabled])", timeout=rr.POLL_TIMEOUT_MS)
+
+            blob = f"https://github.com/{OWNER}/{REPO_NAME}/blob/main/{PATH}"
+            page.evaluate(
+                """(blob) => {
+                    const dt = new DataTransfer();
+                    dt.setData('text/uri-list', blob);
+                    document.getElementById('doclist-mount').dispatchEvent(
+                        new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+                }""", blob)
+            for _ in range(100):
+                docs = _doc_summary(page)
+                if docs and docs[0]['bound'] and docs[0]['sha']:
+                    break
+                page.wait_for_timeout(100)
+
+            docs = _doc_summary(page)
+            assert len(docs) == 1 and docs[0]["path"] == PATH and docs[0]["bound"]
+            assert docs[0]["content"] == REMOTE
+        finally:
+            context.close()
+
+
+def test_local_edit_flips_badge_and_reenables_sync_button(browser, site_dir):
+    """Regression pin: nothing emitted the frozen `doc:saved` event, so the
+    document list never re-rendered after autosave — a freshly opened (synced)
+    file kept its 'Synced' badge and disabled sync button through local edits."""
+    with rr.serve_site(site_dir) as base_url:
+        context, page, _ = _hermetic_page(browser)
+        try:
+            mock = GitHubMock(page, owner=OWNER, repo=REPO_NAME)
+            mock.set_remote("main", PATH, REMOTE)
+            page.goto(
+                f"{base_url}/editor/index.html?repo={OWNER}/{REPO_NAME}&branch=main&open={PATH}",
+                wait_until="load", timeout=rr.POLL_TIMEOUT_MS)
+            page.wait_for_selector(".cm-content", timeout=30_000)
+
+            def ui_state():
+                return page.evaluate(
+                    """() => ({
+                        badge: document.querySelector('.dl-item [class*=badge]')?.textContent.trim(),
+                        btnDisabled: document.querySelector('.dl-sync-action')?.disabled })""")
+
+            page.wait_for_function(
+                """() => document.querySelector('.dl-item [class*=badge]')?.textContent.trim() === 'Synced'""",
+                timeout=15_000)
+            assert ui_state()["btnDisabled"] is True, "in-sync doc starts with a disabled sync button"
+
+            page.locator(".cm-content").click()
+            page.keyboard.press("End")
+            page.keyboard.type(" Local edit.")
+            page.wait_for_function(
+                """() => document.querySelector('.dl-item [class*=badge]')?.textContent.trim() === 'Local changes'""",
+                timeout=30_000)  # autosave debounce + doc:saved re-render
+            assert ui_state()["btnDisabled"] is False, "local edit re-enables the sync button"
+        finally:
+            context.close()
+
+
+def test_deleting_the_open_document_clears_editor_and_preview(browser, site_dir):
+    """Regression pin: deleting the open document from the docs pane left the
+    editor and preview panes showing a ghost of the removed record."""
+    with rr.serve_site(site_dir) as base_url:
+        context, page, _ = _hermetic_page(browser)
+        try:
+            page.set_viewport_size({"width": 1280, "height": 800})
+            page.goto(f"{base_url}/editor/index.html", wait_until="load",
+                      timeout=rr.POLL_TIMEOUT_MS)
+            page.wait_for_selector("#new-doc:not([disabled])", timeout=rr.POLL_TIMEOUT_MS)
+            page.evaluate(
+                """async () => {
+                    const app = await import('/editor/app.js');
+                    const r = await app.modules.store.docs.create({
+                        title: 'Ghost check', path: null,
+                        content: '---\\ntitle: Ghost check\\n---\\n\\nGhost body.' });
+                    await app.openDoc(r.id);
+                    app.setMode('split');
+                    app.bus.dispatchEvent(new CustomEvent('doc:saved'));
+                }""")
+            page.wait_for_selector(".cm-content", timeout=30_000)
+            page.wait_for_timeout(2500)  # let the split preview render the doc
+
+            page.locator(".dl-item .dl-action", has_text="Delete").first.click()
+            page.locator(".dl-danger", has_text="Confirm").click()
+
+            page.wait_for_selector("#editor-mount .empty-state", timeout=15_000)
+            assert page.locator(".cm-content").count() == 0, "editor cleared"
+            ghost = page.evaluate(
+                """() => Array.from(document.querySelectorAll('#preview-mount iframe'))
+                    .some(f => f.srcdoc.includes('Ghost body'))""")
+            assert not ghost, "preview no longer shows the deleted document"
+        finally:
+            context.close()
+
+
+def test_document_audit_reports_and_jumps(browser, site_dir):
+    """Audit feature: whole-document report of StoryKit syntax issues,
+    reachable from the status-bar issues button; line buttons move the
+    cursor. Clean documents get the all-clear message."""
+    with rr.serve_site(site_dir) as base_url:
+        context, page, _ = _hermetic_page(browser)
+        try:
+            page.goto(f"{base_url}/editor/index.html", wait_until="load",
+                      timeout=rr.POLL_TIMEOUT_MS)
+            page.wait_for_selector("#new-doc:not([disabled])", timeout=rr.POLL_TIMEOUT_MS)
+            bad = ('---\ntitle: Audit\n---\n\n'
+                   '{% include embed/image.html id="v1" src="x.jpg" bogus="1" %}\n\n'
+                   'A [dead action](nosuchid/zoomto/pct:1,1,4,4) link.\n')
+            page.evaluate(
+                """async (c) => {
+                    const app = await import('/editor/app.js');
+                    const r = await app.modules.store.docs.create({
+                        title: 'Audit', path: '_posts/2026-07-09-audit.md', content: c });
+                    await app.openDoc(r.id);
+                }""", bad)
+            page.wait_for_selector(".cm-content", timeout=30_000)
+            page.click("#status-lint")
+            page.wait_for_selector("dialog#audit-panel[open]", timeout=8000)
+            rows = page.locator(".sk-audit-row")
+            assert rows.count() >= 2, "unknown attr + dead action link expected"
+            texts = page.evaluate(
+                """() => Array.from(document.querySelectorAll('.sk-audit-msg')).map(e => e.textContent)""")
+            assert any('bogus' in t for t in texts), texts
+            assert any('nosuchid' in t for t in texts), texts
+
+            # line button jumps the cursor and closes the dialog
+            page.locator(".sk-audit-line").first.click()
+            page.wait_for_function(
+                """() => !document.getElementById('audit-panel').open""", timeout=5000)
+
+            # clean document → all-clear
+            page.evaluate(
+                """async () => {
+                    const app = await import('/editor/app.js');
+                    const r = await app.modules.store.docs.create({
+                        title: 'Clean', path: '_posts/2026-07-09-clean.md',
+                        content: '---\\ntitle: Clean\\n---\\n\\nJust prose.\\n' });
+                    await app.openDoc(r.id);
+                }""")
+            page.wait_for_timeout(500)
+            page.click("#status-lint")
+            page.wait_for_selector("dialog#audit-panel[open]", timeout=8000)
+            summary = page.text_content("#audit-summary")
+            assert 'No issues found' in summary, summary
+        finally:
+            context.close()
+
+
+def test_region_aware_spellcheck(browser, site_dir):
+    """Spell check (editor/spellcheck.js): prose typos squiggle, tag/code
+    content is masked, counts merge into the status chip, findings appear in
+    the Audit report, and the personal dictionary suppresses flags. The
+    dictionary is served hermetically (mini fixture via routes)."""
+    with rr.serve_site(site_dir) as base_url:
+        context, page, _ = _hermetic_page(browser)
+        try:
+            words = ["the", "brown", "fox", "over", "lazy", "dog", "spell", "probe"]
+            dic = f"{len(words)}\n" + "\n".join(words) + "\n"
+            page.route("https://cdn.jsdelivr.net/npm/dictionary-en@4.0.0/index.aff",
+                       lambda r: r.fulfill(status=200, body="SET UTF-8\n",
+                                           content_type="text/plain"))
+            page.route("https://cdn.jsdelivr.net/npm/dictionary-en@4.0.0/index.dic",
+                       lambda r: r.fulfill(status=200, body=dic, content_type="text/plain"))
+            page.goto(f"{base_url}/editor/index.html", wait_until="load",
+                      timeout=rr.POLL_TIMEOUT_MS)
+            page.wait_for_selector("#new-doc:not([disabled])", timeout=rr.POLL_TIMEOUT_MS)
+            doc = ('---\ntitle: Spell probe\n---\n\n'
+                   'The qick brown fox jumpd over the lazy dog.\n\n'
+                   '{% include embed/image.html id="v1" src="mispeled.jpg" %}\n')
+            page.evaluate(
+                """async (c) => {
+                    const app = await import('/editor/app.js');
+                    const r = await app.modules.store.docs.create({ title: 'SP', path: null, content: c });
+                    await app.openDoc(r.id);
+                }""", doc)
+            page.wait_for_selector(".cm-content", timeout=30_000)
+            page.wait_for_timeout(2000)  # engine load on first pass
+            page.locator(".cm-content").click()
+            page.keyboard.press("End")
+            page.keyboard.type(" ")      # retrigger lint after engine load
+            page.wait_for_function(
+                "() => document.querySelectorAll('.cm-lintRange-warning').length === 2",
+                timeout=20_000)
+
+            # masked: the tag's misspelled filename is NOT flagged (exactly 2)
+            # audit shows the spelling section
+            page.click('button[data-sk-toolbar-action="audit"]')
+            page.wait_for_selector("dialog#audit-panel[open]", timeout=8000)
+            msgs = page.evaluate(
+                "() => Array.from(document.querySelectorAll('.sk-audit-msg')).map(e => e.textContent)")
+            assert any('qick' in m for m in msgs) and any('jumpd' in m for m in msgs), msgs
+            assert not any('mispeled' in m for m in msgs), f"tag content must be masked: {msgs}"
+            assert 'spelling' in page.text_content('#audit-summary')
+            page.click('#sync-done-btn') if False else page.keyboard.press("Escape")
+
+            # personal dictionary suppresses the flag
+            page.evaluate(
+                """async () => {
+                    const app = await import('/editor/app.js');
+                    app.appState.prefs.spellWords = ['qick'];
+                }""")
+            page.locator(".cm-content").click()
+            page.keyboard.press("End")
+            page.keyboard.type(" ")
+            page.wait_for_function(
+                "() => document.querySelectorAll('.cm-lintRange-warning').length === 1",
+                timeout=20_000)
+        finally:
+            context.close()
+
+
+def test_welcome_document_seeds_once(browser, site_dir):
+    """First run with an empty store seeds the Welcome document (opened in
+    Split on wide viewports); deleting it and reloading does NOT resurrect
+    it (prefs.welcomeSeeded)."""
+    with rr.serve_site(site_dir) as base_url:
+        context, page, _ = _hermetic_page(browser)
+        try:
+            page.set_viewport_size({"width": 1400, "height": 800})
+            page.goto(f"{base_url}/editor/index.html", wait_until="load",
+                      timeout=rr.POLL_TIMEOUT_MS)
+            page.wait_for_selector(".cm-content", timeout=30_000)
+            state = page.evaluate(
+                """async () => {
+                    const app = await import('/editor/app.js');
+                    const docs = await app.modules.store.docs.list();
+                    return { n: docs.length, title: docs[0] && docs[0].title,
+                             mode: app.appState.mode };
+                }""")
+            assert state["n"] == 1 and state["title"] == "Welcome to StoryKit", state
+            assert state["mode"] == "split", state
+
+            # delete it via the real UI (active row), then reload
+            page.locator(".dl-item .dl-action", has_text="Delete").first.click()
+            page.locator(".dl-danger", has_text="Confirm").click()
+            page.wait_for_selector("#editor-mount .empty-state", timeout=15_000)
+            page.reload(wait_until="load")
+            page.wait_for_selector("#new-doc:not([disabled])", timeout=rr.POLL_TIMEOUT_MS)
+            page.wait_for_timeout(800)
+            n = page.evaluate(
+                """async () => (await (await import('/editor/app.js')).modules.store.docs.list()).length""")
+            assert n == 0, "welcome must not resurrect after deletion"
+        finally:
+            context.close()

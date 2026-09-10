@@ -1,0 +1,31 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Local resource transport proof</title></head>
+<body><button id="switch">Switch document</button><iframe id="story" title="Story preview" sandbox="allow-scripts allow-popups allow-forms allow-modals" style="width:100%;height:850px"></iframe>
+<script type="module">
+import { attachPreviewResources, previewResourceScript } from '../../../editor/preview-resources.js';
+const frame = document.querySelector('#story');
+const runtime = new URLSearchParams(location.search).get('runtime');
+const canvas = document.createElement('canvas'); canvas.width = 80; canvas.height = 60;
+const ctx = canvas.getContext('2d'); ctx.fillStyle = '#e75c26'; ctx.fillRect(0,0,80,60);
+ctx.fillStyle = '#194a6d'; ctx.fillRect(10,10,20,20);
+const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', await blob.arrayBuffer()))].map(b => b.toString(16).padStart(2,'0')).join('');
+const resource = { resourceId: 'photo', path: 'assets/posts/proof/photo.png', mime: 'image/png', size: blob.size, contentHash: hash, blob };
+let release, version = 0;
+window.renderProof = function({ empty = false, flat = false } = {}) {
+  release?.(); const generation = 'proof_' + ++version;
+  const assignments = empty ? [] : [{ ...resource, blob: undefined }];
+  release = attachPreviewResources({ frame, generation, resources: empty ? [] : [resource] });
+  const src = `${runtime}/assets/components/image.html?sk_resource=photo&sk_generation=${generation}`;
+  frame.srcdoc = `<!doctype html><html><head><meta charset="utf-8">${previewResourceScript({ generation, assignments, viewerURL: runtime + '/assets/components/image.html' })}
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.18.0/cdn/themes/light.css">
+  <script type="module">import { initStoryKit } from '${runtime}/assets/js/storykit.js';
+  initStoryKit({pageMode:'${flat ? 'flat' : 'col2'}',modeToggle:false,autoFloat:false,groupEmbeds:false,wikidataInfoPopups:false,headerAttribution:false});<\/script></head><body>
+  ${empty ? '<p>Another document has no resources</p>' : `<article><header><h1>Local image proof</h1></header><div class="viewer"></div><div class="post-content"><img id="ordinary" alt="Fixture colors" data-sk-resource="photo">
+  <iframe id="photo-viewer" class="embed-image" data-sk-resource="photo" title="Local image" src="${src}" style="width:500px;height:400px"></iframe>
+  <p><a id="zoom" href="${runtime}/photo-viewer/zoomto/pct:10,10,40,40">Zoom</a></p></div></article>`}
+  </body></html>`;
+  window.proof = { generation, hash, size: blob.size, runtime };
+};
+window.renderProof();
+document.querySelector('#switch').onclick = () => window.renderProof({empty:true});
+</script></body></html>

@@ -1,0 +1,26 @@
+node_modules/
+_site/
+.jekyll-cache/
+.bundle/
+vendor/
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store
+# Framework dependency materialized from tests/fixtures/starter/
+/_admin/
+/_config.yml
+/_data/
+/_includes/
+/_layouts/
+/_plugins/
+/_posts/
+/_tabs/
+/index.html
+/Gemfile
+/Gemfile.lock
+/.ruby-version
+/assets/*
+!/assets/js/
+/assets/js/*
+!/assets/js/skrender.js

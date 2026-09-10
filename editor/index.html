@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>StoryKit Editor</title>
+<link rel="icon" type="image/png" href="./logo.png">
+<meta name="robots" content="noindex" />
+<link rel="stylesheet" href="./styles.css" />
+
+<!--
+  ══════════════════════════════════════════════════════════════════════════════
+  PINNED IMPORT MAP  (WP-2.1 · docs/editor-plan.md §0.4, §1, risk R-3)
+  ══════════════════════════════════════════════════════════════════════════════
+  Buildless: no bundler, no npm. Every module resolves from esm.sh at an EXACT
+  pinned version. Every pin is registered in docs/dependencies.md and enforced by
+  tools/check_editor_pins.py (also run in CI by WP-1.3).
+
+  SINGLE-INSTANCE STRATEGY (risk R-3 — the thing that must be right)
+  ------------------------------------------------------------------
+  esm.sh's `?external=*` makes a package import ALL of its dependencies as *bare*
+  specifiers (e.g. `import {EditorState} from "@codemirror/state"`) instead of
+  inlining its own private copy. Because every package below is requested with
+  `?external=*`, every cross-package dependency edge becomes a bare specifier that
+  this import map resolves to exactly ONE URL. Therefore exactly one instance of
+  each package — critically @codemirror/state and @lezer/common — is ever loaded,
+  no matter how deep the graph. The map must be CLOSED: every bare specifier that
+  any package can emit has an entry here (the CM6 + Lezer core, the language
+  packages lang-markdown transitively pulls in — html/css/javascript — and the
+  leaf helpers style-mod / w3c-keyname / crelt / @marijn/find-cluster-break).
+
+  editor/app.js additionally runs a runtime single-instance ASSERTION at boot
+  (assertSingleInstance): a cross-package `historyField instanceof StateField`
+  identity check plus a functional EditorState.create() over the whole extension
+  graph. On failure it renders a visible fatal banner instead of a broken editor.
+
+  When bumping a version: update the pin here AND docs/dependencies.md, and re-run
+  tools/check_editor_pins.py + tools/run_browser_tests.py.
+-->
+<script type="importmap">
+{
+  "imports": {
+    "fflate": "https://esm.sh/fflate@0.8.3",
+    "@codemirror/state": "https://esm.sh/@codemirror/state@6.7.1?external=*",
+    "@codemirror/view": "https://esm.sh/@codemirror/view@6.43.6?external=*",
+    "@codemirror/language": "https://esm.sh/@codemirror/language@6.12.4?external=*",
+    "@codemirror/commands": "https://esm.sh/@codemirror/commands@6.10.4?external=*",
+    "@codemirror/search": "https://esm.sh/@codemirror/search@6.7.1?external=*",
+    "@codemirror/autocomplete": "https://esm.sh/@codemirror/autocomplete@6.20.3?external=*",
+    "@codemirror/lint": "https://esm.sh/@codemirror/lint@6.9.7?external=*",
+    "@codemirror/lang-markdown": "https://esm.sh/@codemirror/lang-markdown@6.5.0?external=*",
+    "@codemirror/lang-yaml": "https://esm.sh/@codemirror/lang-yaml@6.1.3?external=*",
+    "@codemirror/lang-html": "https://esm.sh/@codemirror/lang-html@6.4.11?external=*",
+    "@codemirror/lang-css": "https://esm.sh/@codemirror/lang-css@6.3.1?external=*",
+    "@codemirror/lang-javascript": "https://esm.sh/@codemirror/lang-javascript@6.2.5?external=*",
+    "@lezer/common": "https://esm.sh/@lezer/common@1.5.2?external=*",
+    "@lezer/highlight": "https://esm.sh/@lezer/highlight@1.2.3?external=*",
+    "@lezer/lr": "https://esm.sh/@lezer/lr@1.4.10?external=*",
+    "@lezer/markdown": "https://esm.sh/@lezer/markdown@1.6.4?external=*",
+    "@lezer/html": "https://esm.sh/@lezer/html@1.3.13?external=*",
+    "@lezer/css": "https://esm.sh/@lezer/css@1.3.4?external=*",
+    "@lezer/javascript": "https://esm.sh/@lezer/javascript@1.5.4?external=*",
+    "@lezer/yaml": "https://esm.sh/@lezer/yaml@1.0.4?external=*",
+    "style-mod": "https://esm.sh/style-mod@4.1.3?external=*",
+    "w3c-keyname": "https://esm.sh/w3c-keyname@2.2.8?external=*",
+    "crelt": "https://esm.sh/crelt@1.0.7?external=*",
+    "@marijn/find-cluster-break": "https://esm.sh/@marijn/find-cluster-break@1.0.3?external=*",
+    "idb": "https://esm.sh/idb@8.0.3?external=*",
+    "js-yaml": "https://esm.sh/js-yaml@4.1.0?external=*",
+    "diff": "https://esm.sh/diff@9.0.0?external=*",
+    "nspell": "https://esm.sh/nspell@2.1.5"
+  }
+}
+</script>
+
+<!--
+  MODULEPRELOAD HINTS (WP-6.3 §6.1 bundle decision — see docs/editor-plan.md §7)
+  Without hints the boot graph is discovered serially: parse app.js → fetch the
+  16 local modules → parse those → fetch the 27 esm.sh wrapper modules → parse
+  those → fetch the real payload modules. Each level is a network round trip;
+  on a Fast-3G profile that measured 6.0 s cold. Preloading BOTH statically
+  known levels (every local boot module + every import-map wrapper URL) lets
+  the browser start them all at HTML-parse time. The esm.sh second-level
+  payload URLs (/v135/…) are deliberately NOT pinned here — they are an esm.sh
+  build artifact that changes without the version changing.
+  MUST mirror the import map above (tools/check_editor_pins.py cross-checks)
+  and app.js's static import list.
+-->
+<link rel="modulepreload" href="https://esm.sh/fflate@0.8.3" />
+<link rel="modulepreload" href="./app.js" />
+<link rel="modulepreload" href="./store.js" />
+<link rel="modulepreload" href="./editor.js" />
+<link rel="modulepreload" href="./commands.js" />
+<link rel="modulepreload" href="./lang-storykit.js" />
+<link rel="modulepreload" href="./doclist.js" />
+<link rel="modulepreload" href="./preview.js" />
+<link rel="modulepreload" href="./statusbar.js" />
+<link rel="modulepreload" href="./github.js" />
+<link rel="modulepreload" href="./context.js" />
+<link rel="modulepreload" href="./wikidata.js" />
+<link rel="modulepreload" href="./dnd.js" />
+<link rel="modulepreload" href="./sync.js" />
+<link rel="modulepreload" href="./conflict.js" />
+<link rel="modulepreload" href="./viewer-catalog.js" />
+<link rel="modulepreload" href="./palette.js" />
+<link rel="modulepreload" href="./toolbar.js" />
+<link rel="modulepreload" href="./url-grammars.js" />
+<link rel="modulepreload" href="./spellcheck.js" />
+<link rel="modulepreload" href="./welcome.js" />
+<link rel="modulepreload" href="https://esm.sh/@codemirror/state@6.7.1?external=*" />
+<link rel="modulepreload" href="https://esm.sh/@codemirror/view@6.43.6?external=*" />
+<link rel="modulepreload" href="https://esm.sh/@codemirror/language@6.12.4?external=*" />
+<link rel="modulepreload" href="https://esm.sh/@codemirror/commands@6.10.4?external=*" />
+<link rel="modulepreload" href="https://esm.sh/@codemirror/search@6.7.1?external=*" />
+<link rel="modulepreload" href="https://esm.sh/@codemirror/autocomplete@6.20.3?external=*" />
+<link rel="modulepreload" href="https://esm.sh/@codemirror/lint@6.9.7?external=*" />
+<link rel="modulepreload" href="https://esm.sh/@codemirror/lang-markdown@6.5.0?external=*" />
+<link rel="modulepreload" href="https://esm.sh/@codemirror/lang-yaml@6.1.3?external=*" />
+<link rel="modulepreload" href="https://esm.sh/@codemirror/lang-html@6.4.11?external=*" />
+<link rel="modulepreload" href="https://esm.sh/@codemirror/lang-css@6.3.1?external=*" />
+<link rel="modulepreload" href="https://esm.sh/@codemirror/lang-javascript@6.2.5?external=*" />
+<link rel="modulepreload" href="https://esm.sh/@lezer/common@1.5.2?external=*" />
+<link rel="modulepreload" href="https://esm.sh/@lezer/highlight@1.2.3?external=*" />
+<link rel="modulepreload" href="https://esm.sh/@lezer/lr@1.4.10?external=*" />
+<link rel="modulepreload" href="https://esm.sh/@lezer/markdown@1.6.4?external=*" />
+<link rel="modulepreload" href="https://esm.sh/@lezer/html@1.3.13?external=*" />
+<link rel="modulepreload" href="https://esm.sh/@lezer/css@1.3.4?external=*" />
+<link rel="modulepreload" href="https://esm.sh/@lezer/javascript@1.5.4?external=*" />
+<link rel="modulepreload" href="https://esm.sh/@lezer/yaml@1.0.4?external=*" />
+<link rel="modulepreload" href="https://esm.sh/style-mod@4.1.3?external=*" />
+<link rel="modulepreload" href="https://esm.sh/w3c-keyname@2.2.8?external=*" />
+<link rel="modulepreload" href="https://esm.sh/crelt@1.0.7?external=*" />
+<link rel="modulepreload" href="https://esm.sh/@marijn/find-cluster-break@1.0.3?external=*" />
+<link rel="modulepreload" href="https://esm.sh/idb@8.0.3?external=*" />
+<link rel="modulepreload" href="https://esm.sh/js-yaml@4.1.0?external=*" />
+<link rel="modulepreload" href="https://esm.sh/diff@9.0.0?external=*" />
+<link rel="modulepreload" href="https://esm.sh/nspell@2.1.5" />
+</head>
+
+<body data-mode="edit">
+<a class="skip-link" href="#editor-mount">Skip to editor</a>
+
+<!-- ── Top bar (spec §7) ─────────────────────────────────────────────────── -->
+<header class="topbar" role="banner">
+  <div class="topbar-left">
+    <button id="sidebar-toggle" class="icon-btn" type="button"
+            aria-label="Toggle document sidebar" aria-expanded="true" aria-controls="sidebar">
+      <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true">
+        <path d="M3 5h14M3 10h14M3 15h14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+      </svg>
+    </button>
+    <span class="brand"><img class="brand-mark" src="./logo.png" alt="" width="22" height="22">StoryKit&nbsp;Editor</span>
+    <button id="doc-title-menu" class="doc-title" type="button" aria-haspopup="menu" aria-disabled="true" disabled>
+      <span class="doc-title-text">Untitled draft</span>
+      <svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true">
+        <path d="M6 8l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+  </div>
+
+  <div class="topbar-right">
+    <div class="segmented" role="group" aria-label="Editor mode">
+      <button class="seg-btn is-active" type="button" data-mode-btn="edit" aria-pressed="true">Edit</button>
+      <button class="seg-btn" type="button" data-mode-btn="split" aria-pressed="false">Split</button>
+      <button class="seg-btn" type="button" data-mode-btn="preview" aria-pressed="false">Preview</button>
+    </div>
+    <!-- WP-6.1: the standalone "Link entity" icon button that lived here
+         (WP-4.3) was removed once the toolbar's own Link-entity button (and
+         the command palette's "Link entity" entry) covered the same action
+         — ⌘⇧K still works either way; see editor/app.js's wireControls(). -->
+    <a id="help-link" class="icon-btn help-link" href="./help.html" target="_blank" rel="noopener"
+       aria-label="Editor help" title="Editor help">
+      <svg viewBox="0 0 20 20" width="22" height="22" aria-hidden="true">
+        <path d="M10 2a8 8 0 100 16 8 8 0 000-16zm0 12.9a1.1 1.1 0 110-2.2 1.1 1.1 0 010 2.2zm1.15-4.32c-.36.27-.55.46-.55.92v.3H8.9v-.42c0-.9.42-1.4.98-1.8.5-.37.82-.62.82-1.18 0-.62-.5-1.03-1.2-1.03-.73 0-1.24.44-1.42 1.13l-1.6-.67C6.86 6.52 7.9 5.5 9.55 5.5c1.7 0 2.95 1 2.95 2.5 0 1.13-.6 1.7-1.35 2.58z" fill="currentColor"/>
+      </svg>
+    </a>
+    <button id="theme-toggle" class="icon-btn" type="button" aria-label="Theme: system (click to change)" data-theme-pref="system">
+      <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true">
+        <path d="M10 3a7 7 0 100 14 5 5 0 010-14z" fill="currentColor"/>
+      </svg>
+    </button>
+    <!-- The gear that lived here (opened the sync panel) was removed
+         2026-07-09. Entry points to the panel now: the doc-list toolbar's
+         "GitHub" button (document-independent — the one that works before
+         any GitHub file is loaded), each row's "Sync with GitHub" button,
+         the status-bar chip, and the palette's "Open sync panel". -->
+  </div>
+</header>
+
+<!-- ── Body: sidebar + editor (spec §7) ──────────────────────────────────── -->
+<div class="workspace">
+  <!-- Collapsible document sidebar -->
+  <aside id="sidebar" class="sidebar" aria-label="Documents">
+    <div class="sidebar-head">
+      <h2 class="sidebar-title">Documents</h2>
+      <button class="btn btn-primary btn-sm" type="button" id="new-doc" disabled aria-disabled="true">+ New</button>
+    </div>
+    <div id="doclist-mount" class="doclist">
+      <!-- doclist.js (WP-2.5+) mounts the live list here almost immediately
+           at boot; this skeleton is only ever visible for the brief window
+           before that (module parse) — reserves the same shape as a real
+           list so there's no layout shift when it lands (WP-6.2 §5.4). -->
+      <ul class="dl-list" aria-hidden="true">
+        <li class="dl-skeleton-item"><div class="skeleton-line w-60"></div></li>
+        <li class="dl-skeleton-item"><div class="skeleton-line w-40"></div></li>
+        <li class="dl-skeleton-item"><div class="skeleton-line w-70"></div></li>
+      </ul>
+    </div>
+  </aside>
+
+  <!-- Main editor region -->
+  <main class="editor-region" aria-label="Editor">
+    <!-- WP-6.1: toolbar.js's createToolbar() renders the §7 minimal set
+         here (bold/italic/link/heading/list/Insert viewer/Link entity).
+         Static content below is a pre-JS placeholder only. Hidden in
+         Preview mode (styles.css) — nothing to format there. -->
+    <div id="toolbar-mount" class="editor-toolbar" role="toolbar" aria-label="Formatting"></div>
+
+    <div class="editor-panes">
+      <!-- Plain container: CM6 renders the REAL textbox (role="textbox"
+           .cm-content, named via EditorView.contentAttributes in
+           editor.js). A textbox role here would nest textboxes —
+           flagged by the WP-6.3 axe audit. -->
+      <div id="editor-mount" class="editor-mount">
+        <!-- Skeleton shown until CM6 mounts (no layout shift). -->
+        <div class="skeleton" aria-hidden="true">
+          <div class="skeleton-line w-40"></div>
+          <div class="skeleton-line w-20"></div>
+          <div class="skeleton-line w-80"></div>
+          <div class="skeleton-line w-70"></div>
+          <div class="skeleton-line w-60"></div>
+          <div class="skeleton-line w-50"></div>
+        </div>
+      </div>
+
+      <!-- preview.js (WP-3.3+) mounts its own pv-root (iframe + quiet
+           loading/empty overlay, WP-6.2) here at boot, replacing this
+           pre-JS placeholder almost immediately. -->
+      <div id="preview-mount" class="preview-mount" aria-label="Preview">
+        <div class="skeleton" aria-hidden="true">
+          <div class="skeleton-line w-40"></div>
+          <div class="skeleton-line w-70"></div>
+          <div class="skeleton-line w-50"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ── Status bar (spec §7) ──────────────────────────────────────────────── -->
+<!-- statusbar.js (WP-5.1) renders the binding chip + 5-state badge, word count,
+     cursor, and lint count into this mount. Static content below is a pre-JS
+     placeholder only (replaced on boot). -->
+<footer id="statusbar-mount" class="statusbar" role="contentinfo" aria-label="Status">
+  <div class="status-group status-left">
+    <span class="status-chip"><span class="status-dot" data-state="local"></span> Local only</span>
+  </div>
+  <div class="status-group status-right">
+    <span class="status-item">0 words</span>
+  </div>
+</footer>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>

@@ -1,0 +1,111 @@
+name: "Editor checks"
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: "editor-checks-${{ github.ref }}"
+  cancel-in-progress: true
+
+jobs:
+  editor-checks:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Prepare framework dependency
+        run: node tools/prepare-framework.mjs
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          # Ruby version is read from .ruby-version so local and CI builds stay in sync
+          bundler-cache: true
+
+      - name: Build site
+        run: bundle exec jekyll build
+        env:
+          JEKYLL_ENV: "production"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install authentication service dependencies
+        run: npm ci --prefix prototypes/github-auth
+
+      - name: Authentication service tests
+        run: npm test --prefix prototypes/github-auth
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Playwright (Python)
+        run: pip install playwright pytest
+
+      - name: Resolve Playwright version
+        id: playwright-version
+        run: echo "version=$(pip show playwright | awk '/^Version:/{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-three-engines-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: playwright install chromium firefox webkit --with-deps
+
+      - name: Install browser system dependencies on cache hit
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: playwright install-deps chromium firefox webkit
+
+      - name: Local media paths through real Jekyll
+        run: bundle exec ruby tools/prove_local_media.rb
+        env:
+          JEKYLL_ENV: production
+
+      - name: Render regression (--check)
+        run: python tools/render_regression.py --check --target editor
+
+      - name: Browser unit tests
+        run: python tools/run_browser_tests.py
+
+      - name: Viewer catalog drift check
+        run: python tools/check_viewer_catalog.py
+
+      - name: Editor import-map pin check
+        run: python tools/check_editor_pins.py
+
+      - name: Editor e2e — M2 persistence + M3 preview + M4 media/entities + M5 sync (Playwright)
+        # Drives editor/index.html end to end: create → type → restart the
+        # persistent browser context → assert nothing is lost; autosave window;
+        # 50 KB responsiveness; StoryKit tag highlighting; Monument Valley
+        # preview byte-compared against the M1 golden (test_m3_preview.py,
+        # equivalent to `render_regression.py --check --target editor`); drop/
+        # paste URL-grammar tag insertion + mocked-Wikidata entity linking +
+        # hover cards + offline degradation (test_m4_media.py); GitHub sync
+        # round-trip (create → commit to a new branch → remote edit → pull),
+        # all three commit-conflict resolutions, token hygiene, and
+        # first-commit-creates, against a stateful GitHub API mock
+        # (test_m5_sync.py + github_mock.py). esm.sh module loads run live (as
+        # the browser unit suite already does); Wikidata and GitHub are both
+        # network-mocked (route interception owned by each suite).
+        run: python -m pytest tests/e2e/ -v
+
+      - name: Integrated GitHub login browser tests
+        run: python -m pytest prototypes/github-auth/tests/test_browser.py -v

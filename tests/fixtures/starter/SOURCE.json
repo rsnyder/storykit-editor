@@ -1,0 +1,5 @@
+{
+  "repository": "rsnyder/storykit-starter",
+  "baseCommit": "b70f465a1231cda74facf61223dd76e025afafc8",
+  "note": "Includes uncommitted framework changes at extraction, 2026-09-10."
+}

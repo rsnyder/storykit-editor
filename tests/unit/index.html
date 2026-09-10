@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>StoryKit editor — unit tests</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+<!--
+  Import map for modules under test. Buildless per docs/editor-spec.md §6.1 /
+  docs/editor-plan.md §0.4 — no bundler, pinned exact versions from esm.sh
+  when a WP needs one (register new pins in docs/dependencies.md too).
+
+  WP-2.1: mirrors editor/index.html's pinned map exactly so editor modules
+  import identically under test (`?external=*` dedupe — see the strategy
+  comment in editor/index.html; tools/check_editor_pins.py validates the
+  editor page's copy). Keep the two maps in sync when bumping pins.
+-->
+<script type="importmap">
+{
+  "imports": {
+    "fflate": "https://esm.sh/fflate@0.8.3",
+    "@codemirror/state": "https://esm.sh/@codemirror/state@6.7.1?external=*",
+    "@codemirror/view": "https://esm.sh/@codemirror/view@6.43.6?external=*",
+    "@codemirror/language": "https://esm.sh/@codemirror/language@6.12.4?external=*",
+    "@codemirror/commands": "https://esm.sh/@codemirror/commands@6.10.4?external=*",
+    "@codemirror/search": "https://esm.sh/@codemirror/search@6.7.1?external=*",
+    "@codemirror/autocomplete": "https://esm.sh/@codemirror/autocomplete@6.20.3?external=*",
+    "@codemirror/lint": "https://esm.sh/@codemirror/lint@6.9.7?external=*",
+    "@codemirror/lang-markdown": "https://esm.sh/@codemirror/lang-markdown@6.5.0?external=*",
+    "@codemirror/lang-yaml": "https://esm.sh/@codemirror/lang-yaml@6.1.3?external=*",
+    "@codemirror/lang-html": "https://esm.sh/@codemirror/lang-html@6.4.11?external=*",
+    "@codemirror/lang-css": "https://esm.sh/@codemirror/lang-css@6.3.1?external=*",
+    "@codemirror/lang-javascript": "https://esm.sh/@codemirror/lang-javascript@6.2.5?external=*",
+    "@lezer/common": "https://esm.sh/@lezer/common@1.5.2?external=*",
+    "@lezer/highlight": "https://esm.sh/@lezer/highlight@1.2.3?external=*",
+    "@lezer/lr": "https://esm.sh/@lezer/lr@1.4.10?external=*",
+    "@lezer/markdown": "https://esm.sh/@lezer/markdown@1.6.4?external=*",
+    "@lezer/html": "https://esm.sh/@lezer/html@1.3.13?external=*",
+    "@lezer/css": "https://esm.sh/@lezer/css@1.3.4?external=*",
+    "@lezer/javascript": "https://esm.sh/@lezer/javascript@1.5.4?external=*",
+    "@lezer/yaml": "https://esm.sh/@lezer/yaml@1.0.4?external=*",
+    "style-mod": "https://esm.sh/style-mod@4.1.3?external=*",
+    "w3c-keyname": "https://esm.sh/w3c-keyname@2.2.8?external=*",
+    "crelt": "https://esm.sh/crelt@1.0.7?external=*",
+    "@marijn/find-cluster-break": "https://esm.sh/@marijn/find-cluster-break@1.0.3?external=*",
+    "idb": "https://esm.sh/idb@8.0.3?external=*",
+    "js-yaml": "https://esm.sh/js-yaml@4.1.0?external=*",
+    "diff": "https://esm.sh/diff@9.0.0?external=*",
+    "nspell": "https://esm.sh/nspell@2.1.5"
+  }
+}
+</script>
+</head>
+<body>
+<h1 style="font: 16px -apple-system, system-ui, sans-serif; padding: 16px 16px 0;">
+  StoryKit editor — unit tests
+</h1>
+<div id="test-results">
+  <p style="font: 14px -apple-system, system-ui, sans-serif; padding: 0 16px; color: #666;">
+    Running…
+  </p>
+</div>
+
+<script type="module">
+  import { run } from './runner.js';
+
+  // ---- BEGIN TEST MANIFEST -------------------------------------------
+  // Every tests/unit/*.test.js module must be listed here to run. Later
+  // WPs: append your new test file's relative path to this array (keep
+  // one entry per line, alphabetical is fine but not required).
+  const TEST_MODULES = [
+    './sample-pass.test.js',
+    './scaffold.test.js',
+    './store.test.js',
+    './workspace.test.js',
+    './url-grammars.test.js',
+    './github.test.js',
+    './context.test.js',
+    './doclist.test.js',
+    './editor.test.js',
+    './lang-storykit.test.js',
+    './preview.test.js',
+    './wikidata.test.js',
+    './dnd.test.js',
+    './conflict.test.js',
+    './sync.test.js',
+    './skrender.test.js',
+    './scrollsync.test.js',
+    './spellcheck.test.js',
+    './welcome.test.js',
+    './palette.test.js',
+    './toolbar.test.js',
+  ];
+  // ---- END TEST MANIFEST ---------------------------------------------
+
+  // Self-test hook: ?selftest=fail loads an additional, deliberately
+  // failing test module so tools/run_browser_tests.py (or a human) can
+  // verify the harness correctly reports failures / exit code 1 without
+  // a permanently-failing test living in the normal seed suite.
+  const params = new URLSearchParams(location.search);
+  const modules = [...TEST_MODULES];
+  if (params.get('selftest') === 'fail') {
+    modules.push('./selftest-fail.test.js');
+  }
+
+  for (const path of modules) {
+    await import(path);
+  }
+
+  await run();
+</script>
+</body>
+</html>
